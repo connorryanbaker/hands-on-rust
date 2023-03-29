@@ -1,9 +1,8 @@
 use bracket_lib::prelude::*;
 
 const FLOOR_HEIGHT : i32 = 30;
-const SCREEN_HEIGHT : i32 = 50;
 const SCREEN_WIDTH : i32 = 80;
-const FRAME_DURATION : f32 = 75.0;
+const FRAME_DURATION : f32 = 45.0;
 
 enum GameMode {
   Menu,
@@ -54,10 +53,43 @@ impl Player {
   }
 }
 
+struct Log {
+  x: i32,
+}
+
+impl Log {
+  fn new(x: i32) -> Self {
+    Log {
+      x,
+    }
+  }
+
+  fn render(&mut self, player_x: i32, ctx: &mut BTerm) {
+    let screen_x = self.x - player_x;
+    for i in 0..3 {
+      ctx.set(
+        screen_x + i,
+        FLOOR_HEIGHT,
+        GREEN,
+        BROWN1,
+        to_cp437('L'),
+      );
+    }
+  }
+
+  fn is_colliding(&self, player: &Player) -> bool {
+    let match_y = player.y == FLOOR_HEIGHT;
+    let match_x = player.x == self.x || player.x == self.x - 1 || player.x == self.x - 2;
+    match_y && match_x
+  }
+}
+
 struct State {
   mode: GameMode,
   frame_time: f32,
   player: Player,
+  log: Log,
+  score: i32,
 }
 
 impl State {
@@ -66,12 +98,15 @@ impl State {
       mode: GameMode::Menu,
       player: Player::new(5, FLOOR_HEIGHT),
       frame_time: 0.0,
+      log: Log::new(SCREEN_WIDTH),
+      score: 0,
     }
   }
   
   fn dead(&mut self, ctx: &mut BTerm) {
     ctx.cls();
     ctx.print_centered(5, "Game Over!");
+    ctx.print_centered(6, &format!("Your score: {}", self.score));
     ctx.print_centered(8, "(P) Play Again");
     ctx.print_centered(9, "(Q) Quit");
 
@@ -101,6 +136,8 @@ impl State {
 
   fn play(&mut self, ctx: &mut BTerm) {
     ctx.cls_bg(NAVY);
+    ctx.print(0, 0, "Press SPACE to jump!");
+    ctx.print(0, 1, &format!("Score: {}", self.score));
     self.frame_time += ctx.frame_time_ms;
     if self.frame_time > FRAME_DURATION {
       self.frame_time = 0.0;
@@ -109,14 +146,23 @@ impl State {
     if let Some(VirtualKeyCode::Space) = ctx.key {
       self.player.jump();
     }
+    if self.player.x > self.log.x + 2 {
+      self.log = Log::new(self.player.x + SCREEN_WIDTH);
+      self.score += 1;
+    }
     self.player.render(ctx);
-    ctx.print(0, 0, "Press SPACE to jump!");
+    self.log.render(self.player.x, ctx);
+    if self.log.is_colliding(&self.player) {
+      self.mode = GameMode::End;
+    }
   }
 
   fn restart(&mut self) {
     self.player = Player::new(5, FLOOR_HEIGHT);
     self.frame_time = 0.0;
     self.mode = GameMode::Playing;
+    self.log = Log::new(5 + SCREEN_WIDTH);
+    self.score = 0;
   }
 }
 
